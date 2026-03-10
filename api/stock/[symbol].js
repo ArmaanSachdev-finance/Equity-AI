@@ -8,32 +8,41 @@ export default async function handler(req, res) {
   if (!key) return res.status(500).json({ error: 'FMP_API_KEY not set in Vercel environment variables.' });
   if (!sym) return res.status(400).json({ error: 'No ticker symbol provided.' });
 
-  const FMP = 'https://financialmodelingprep.com/api';
+  // New FMP stable API base (v3 was deprecated August 2025)
+  const FMP = 'https://financialmodelingprep.com/stable';
 
   try {
     const [profile, quote, income, balance, cashflow, ratios, metrics] = await Promise.all([
-      fetch(`${FMP}/v3/profile/${sym}?apikey=${key}`).then(r => r.json()),
-      fetch(`${FMP}/v3/quote/${sym}?apikey=${key}`).then(r => r.json()),
-      fetch(`${FMP}/v3/income-statement/${sym}?limit=5&apikey=${key}`).then(r => r.json()),
-      fetch(`${FMP}/v3/balance-sheet-statement/${sym}?limit=5&apikey=${key}`).then(r => r.json()),
-      fetch(`${FMP}/v3/cash-flow-statement/${sym}?limit=5&apikey=${key}`).then(r => r.json()),
-      fetch(`${FMP}/v3/ratios/${sym}?limit=3&apikey=${key}`).then(r => r.json()),
-      fetch(`${FMP}/v3/key-metrics/${sym}?limit=3&apikey=${key}`).then(r => r.json()),
+      fetch(`${FMP}/profile?symbol=${sym}&apikey=${key}`).then(r => r.json()),
+      fetch(`${FMP}/quote?symbol=${sym}&apikey=${key}`).then(r => r.json()),
+      fetch(`${FMP}/income-statement?symbol=${sym}&limit=5&apikey=${key}`).then(r => r.json()),
+      fetch(`${FMP}/balance-sheet-statement?symbol=${sym}&limit=5&apikey=${key}`).then(r => r.json()),
+      fetch(`${FMP}/cash-flow-statement?symbol=${sym}&limit=5&apikey=${key}`).then(r => r.json()),
+      fetch(`${FMP}/ratios?symbol=${sym}&limit=3&apikey=${key}`).then(r => r.json()),
+      fetch(`${FMP}/key-metrics?symbol=${sym}&limit=3&apikey=${key}`).then(r => r.json()),
     ]);
 
-    const p = Array.isArray(profile) ? profile[0] : null;
-    const q = Array.isArray(quote)   ? quote[0]   : null;
+    // New API returns data array or object — normalise both shapes
+    const toArr = (d) => Array.isArray(d) ? d : (d?.data ?? []);
 
-    if (!p || !q) return res.status(404).json({ error: `Ticker "${sym}" not found. Check the symbol and try again.` });
+    const profileArr = toArr(profile);
+    const quoteArr   = toArr(quote);
+
+    const p = profileArr[0] ?? null;
+    const q = quoteArr[0]   ?? null;
+
+    if (!p || !q) {
+      return res.status(404).json({ error: `Ticker "${sym}" not found. Check the symbol and try again.` });
+    }
 
     res.status(200).json({
       profile:    p,
       quote:      q,
-      income:     Array.isArray(income)   ? income   : [],
-      balance:    Array.isArray(balance)  ? balance  : [],
-      cashflow:   Array.isArray(cashflow) ? cashflow : [],
-      ratios:     Array.isArray(ratios)   ? ratios   : [],
-      keyMetrics: Array.isArray(metrics)  ? metrics  : [],
+      income:     toArr(income),
+      balance:    toArr(balance),
+      cashflow:   toArr(cashflow),
+      ratios:     toArr(ratios),
+      keyMetrics: toArr(metrics),
     });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to fetch stock data.' });
